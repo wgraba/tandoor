@@ -1,0 +1,57 @@
+version: "3"
+services:
+  db_tandoor:
+    restart: unless-stopped
+    image: postgres:11-alpine
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+    env_file:
+      - ./.env
+    networks:
+      - tandoor
+
+  web_recipes:
+    restart: unless-stopped
+    image: vabene1111/recipes:latest
+    env_file:
+      - ./.env
+    volumes:
+      - tandoor_staticfiles:/opt/recipes/staticfiles
+      - tandoor_nginx_cfg:/opt/recipes/nginx/conf.d
+      - ./mediafiles:/opt/recipes/mediafiles
+    depends_on:
+      - db_tandoor
+    networks:
+      - tandoor
+
+  nginx_tandoor:
+    image: nginx:mainline-alpine
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - tandoor_nginx_cfg:/etc/nginx/conf.d:ro
+      - tandoor_staticfiles:/static:ro
+      - ./mediafiles:/media:ro
+    labels:
+      # traefik example labels
+      - traefik.enable=true
+      - traefik.http.routers.tandoor.rule=Host(`recipes.federation.home`)
+      - traefik.http.routers.tandoor.entrypoints=web-secure
+      - traefik.http.routers.tandoor.tls=true
+      - traefik.http.services.tandoor.loadbalancer.server.port=80
+    depends_on:
+      - web_recipes
+    networks:
+      - tandoor
+      - web
+
+networks:
+  tandoor:
+  web:
+    # This is your external traefik network
+    external: true
+
+volumes:
+  tandoor_nginx_cfg:
+  tandoor_staticfiles:
